@@ -1,10 +1,10 @@
 import React, { useState, type JSX } from 'react';
 
 interface PricingData {
-  tooCheap: number;
-  bargain: number;
-  expensive: number;
-  tooExpensive: number;
+  tooCheap: string;
+  bargain: string;
+  expensive: string;
+  tooExpensive: string;
 }
 
 interface Results {
@@ -109,10 +109,10 @@ const VanWestendorpPricingTool: React.FC = () => {
   const [currency, setCurrency] = useState<Currency>('LKR');
   const [productName, setProductName] = useState<string>('');
   const [pricingData, setPricingData] = useState<PricingData>({
-    tooCheap: 0,
-    bargain: 0,
-    expensive: 0,
-    tooExpensive: 0
+    tooCheap: '',
+    bargain: '',
+    expensive: '',
+    tooExpensive: ''
   });
   const [results, setResults] = useState<Results | null>(null);
   const [showResults, setShowResults] = useState<boolean>(false);
@@ -123,17 +123,30 @@ const VanWestendorpPricingTool: React.FC = () => {
     setLanguage(lang);
   };
 
+  // This is the CRITICAL fix - preserve the exact string the user types
   const handlePricingDataChange = (field: keyof PricingData, value: string) => {
-    setPricingData(prev => ({
-      ...prev,
-      [field]: parseFloat(value) || 0
-    }));
+    // Only validate that it's a valid number format, but keep as string
+    const isValidInput = value === '' || /^\d*\.?\d*$/.test(value);
+    
+    if (isValidInput) {
+      setPricingData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
   };
 
   const calculatePricing = () => {
-    const { tooCheap, bargain, expensive, tooExpensive } = pricingData;
+    // Convert to numbers only during calculation
+    const tooCheap = parseFloat(pricingData.tooCheap);
+    const bargain = parseFloat(pricingData.bargain);
+    const expensive = parseFloat(pricingData.expensive);
+    const tooExpensive = parseFloat(pricingData.tooExpensive);
 
-    if (tooCheap === 0 || bargain === 0 || expensive === 0 || tooExpensive === 0) {
+    // Check if any field is empty or invalid
+    if (!pricingData.tooCheap || !pricingData.bargain || !pricingData.expensive || !pricingData.tooExpensive ||
+        isNaN(tooCheap) || isNaN(bargain) || isNaN(expensive) || isNaN(tooExpensive) ||
+        tooCheap <= 0 || bargain <= 0 || expensive <= 0 || tooExpensive <= 0) {
       alert(t.fillAllFields);
       return;
     }
@@ -272,8 +285,9 @@ const VanWestendorpPricingTool: React.FC = () => {
                 {t.q1Text}
               </p>
               <input
-                type="number"
-                value={pricingData.tooCheap || ''}
+                type="text"
+                inputMode="decimal"
+                value={pricingData.tooCheap}
                 onChange={(e) => handlePricingDataChange('tooCheap', e.target.value)}
                 placeholder="0"
                 className="w-full px-4 py-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
@@ -289,8 +303,9 @@ const VanWestendorpPricingTool: React.FC = () => {
                 {t.q2Text}
               </p>
               <input
-                type="number"
-                value={pricingData.bargain || ''}
+                type="text"
+                inputMode="decimal"
+                value={pricingData.bargain}
                 onChange={(e) => handlePricingDataChange('bargain', e.target.value)}
                 placeholder="0"
                 className="w-full px-4 py-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
@@ -306,8 +321,9 @@ const VanWestendorpPricingTool: React.FC = () => {
                 {t.q3Text}
               </p>
               <input
-                type="number"
-                value={pricingData.expensive || ''}
+                type="text"
+                inputMode="decimal"
+                value={pricingData.expensive}
                 onChange={(e) => handlePricingDataChange('expensive', e.target.value)}
                 placeholder="0"
                 className="w-full px-4 py-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
@@ -323,8 +339,9 @@ const VanWestendorpPricingTool: React.FC = () => {
                 {t.q4Text}
               </p>
               <input
-                type="number"
-                value={pricingData.tooExpensive || ''}
+                type="text"
+                inputMode="decimal"
+                value={pricingData.tooExpensive}
                 onChange={(e) => handlePricingDataChange('tooExpensive', e.target.value)}
                 placeholder="0"
                 className="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
@@ -408,37 +425,33 @@ const VanWestendorpPricingTool: React.FC = () => {
 
         {/* Footer */}
        <div className="text-center mt-8 text-white">
- 
+          <p className="text-blue-200 text-sm mt-4 flex justify-center items-center gap-2">
+            <a
+              href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 hover:underline"
+            >
+              <img
+                src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg"
+                alt="LinkedIn"
+                className="w-5 h-5"
+              />
+              Connect on LinkedIn
+            </a>
+          </p>
 
-  <p className="text-blue-200 text-sm mt-4 flex justify-center items-center gap-2">
-    <a
-      href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 hover:underline"
-    >
-      <img
-        src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg"
-        alt="LinkedIn"
-        className="w-5 h-5"
-      />
-      Connect on LinkedIn
-    </a>
-  </p>
-
-  <p className="text-gray-400 text-sm mt-2">Developed by Sarathkumar</p>
-  <p className="text-gray-400 text-sm mt-1">
-    
-    <a
-      href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="hover:underline text-blue-300"
-    >
-     
-    </a>
-  </p>
-</div>
+          <p className="text-gray-400 text-sm mt-2">Developed by Sarathkumar</p>
+          <p className="text-gray-400 text-sm mt-1">
+            <a
+              href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline text-blue-300"
+            >
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );
