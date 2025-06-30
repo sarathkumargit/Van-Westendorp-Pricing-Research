@@ -72,7 +72,7 @@ const translations: Translations = {
     minLabel: 'අවම මිල:',
     maxLabel: 'උපරිම මිල:',
     recommendationsTitle: '💡 නිර්දේශ',
-    footerText: '',
+    footerText: 'Developed by sarath',
     productNamePlaceholder: 'නිෂ්පාදන නම ඇතුළත් කරන්න',
     fillAllFields: 'කරුණාකර සියලු ක්ෂේත්‍ර පුරවන්න'
   },
@@ -98,7 +98,7 @@ const translations: Translations = {
     minLabel: 'குறைந்தபட்ச விலை:',
     maxLabel: 'அதிகபட்ச விலை:',
     recommendationsTitle: '💡 பரிந்துரைகள்',
-    footerText: '',
+    footerText: 'Developed by sarath',
     productNamePlaceholder: 'தயாரிப்பு பெயரை உள்ளிடவும்',
     fillAllFields: 'தயவுசெய்து அனைத்து புலங்களையும் நிரப்பவும்'
   }
