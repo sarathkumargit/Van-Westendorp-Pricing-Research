@@ -408,7 +408,7 @@ const VanWestendorpPricingTool: React.FC = () => {
 
         {/* Footer */}
        <div className="text-center mt-8 text-white">
-  <p>{t.footerText}</p>
+ 
 
   <p className="text-blue-200 text-sm mt-4 flex justify-center items-center gap-2">
     <a
@@ -428,14 +428,14 @@ const VanWestendorpPricingTool: React.FC = () => {
 
   <p className="text-gray-400 text-sm mt-2">Developed by Sarathkumar</p>
   <p className="text-gray-400 text-sm mt-1">
-    Contact here:{" "}
+    
     <a
       href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
       target="_blank"
       rel="noopener noreferrer"
       className="hover:underline text-blue-300"
     >
-      LinkedIn
+     
     </a>
   </p>
 </div>
