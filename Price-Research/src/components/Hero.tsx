@@ -72,7 +72,7 @@ const translations: Translations = {
     minLabel: 'අවම මිල:',
     maxLabel: 'උපරිම මිල:',
     recommendationsTitle: '💡 නිර්දේශ',
-    footerText: 'LetUs ව්‍යාපාර උපදේශනය විසින් බලගන්වන ලදී',
+    footerText: '',
     productNamePlaceholder: 'නිෂ්පාදන නම ඇතුළත් කරන්න',
     fillAllFields: 'කරුණාකර සියලු ක්ෂේත්‍ර පුරවන්න'
   },
@@ -98,7 +98,7 @@ const translations: Translations = {
     minLabel: 'குறைந்தபட்ச விலை:',
     maxLabel: 'அதிகபட்ச விலை:',
     recommendationsTitle: '💡 பரிந்துரைகள்',
-    footerText: 'LetUs வணிக ஆலோசனையால் இயக்கப்படுகிறது',
+    footerText: '',
     productNamePlaceholder: 'தயாரிப்பு பெயரை உள்ளிடவும்',
     fillAllFields: 'தயவுசெய்து அனைத்து புலங்களையும் நிரப்பவும்'
   }
@@ -407,10 +407,38 @@ const VanWestendorpPricingTool: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-white">
-          <p>{t.footerText}</p>
-          <p className="text-blue-200 text-sm mt-2"> </p>
-        </div>
+       <div className="text-center mt-8 text-white">
+  <p>{t.footerText}</p>
+
+  <p className="text-blue-200 text-sm mt-4 flex justify-center items-center gap-2">
+    <a
+      href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 hover:underline"
+    >
+      <img
+        src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linkedin/linkedin-original.svg"
+        alt="LinkedIn"
+        className="w-5 h-5"
+      />
+      Connect on LinkedIn
+    </a>
+  </p>
+
+  <p className="text-gray-400 text-sm mt-2">Developed by Sarathkumar</p>
+  <p className="text-gray-400 text-sm mt-1">
+    Contact here:{" "}
+    <a
+      href="https://www.linkedin.com/in/sarath-kumar-07aa14302"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="hover:underline text-blue-300"
+    >
+      LinkedIn
+    </a>
+  </p>
+</div>
       </div>
     </div>
   );
