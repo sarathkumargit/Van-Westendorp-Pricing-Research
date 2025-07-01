@@ -10,7 +10,7 @@ interface CustomerResponse {
 
 interface VanWestendorpResults {
   opp: number | null; // Optimal Price Point
-   ipp: number | null; // Indifference Price Point
+  ipp: number | null; // Indifference Price Point
   pmch: number | null; // Point of Marginal Cheapness
   pme: number | null; // Point of Marginal Expensiveness
   chartData: Array<{
@@ -289,6 +289,7 @@ const VanWestendorpPricingTool: React.FC = () => {
         <div className="space-y-3 text-sm sm:text-base">
           <p><strong>🎯 ප්‍රශස්ත මිල:</strong> {opp ? `${currency} ${opp.toFixed(2)}` : 'N/A'} - මෙය ගනුදෙනුකරුවන්ගේ මිල සංවේදනීයතාවේ "මැද ලක්ෂ්‍යය"</p>
           <p><strong>📊 නිර්දේශිත මිල පරාසය:</strong> {pmch && pme ? `${currency} ${pmch.toFixed(2)} - ${currency} ${pme.toFixed(2)}` : 'N/A'}</p>
+          <p><strong>🔍 උදාසීන මිල ලක්ෂ්‍යය:</strong> {ipp ? `${currency} ${ipp.toFixed(2)}` : 'N/A'} - ගුණාත්මක සහ මිල සමතුලිත වන ස්ථානය</p>
           <p><strong>💡 නිර්දේශ:</strong> ඔබේ නිෂ්පාදනය OPP ආසන්නයේ මිල ගණන් කරන්න.</p>
           <p><strong>⚠️ අවධානය:</strong> PMC ට වඩා අඩු මිලක් ගුණාත්මක ප්‍රශ්න ඇති කරයි.</p>
         </div>
@@ -298,6 +299,7 @@ const VanWestendorpPricingTool: React.FC = () => {
         <div className="space-y-3 text-sm sm:text-base">
           <p><strong>🎯 உகந்த விலை:</strong> {opp ? `${currency} ${opp.toFixed(2)}` : 'N/A'} - இது வாடிக்கையாளர்களின் விலை உணர்வின் "இனிய புள்ளி"</p>
           <p><strong>📊 பரிந்துரைக்கப்பட்ட விலை வரம்பு:</strong> {pmch && pme ? `${currency} ${pmch.toFixed(2)} - ${currency} ${pme.toFixed(2)}` : 'N/A'}</p>
+          <p><strong>🔍 அலட்சிய விலை புள்ளி:</strong> {ipp ? `${currency} ${ipp.toFixed(2)}` : 'N/A'} - தரம் மற்றும் விலை சமநிலையடையும் இடம்</p>
           <p><strong>💡 பரிந்துரை:</strong> உங்கள் தயாரிப்பை OPP க்கு அருகில் விலை நிர்ணயம் செய்யுங்கள்.</p>
           <p><strong>⚠️ எச்சரிக்கை:</strong> PMC யை விட குறைவான விலை தர கேள்விகளை எழுப்பும்.</p>
         </div>
@@ -307,6 +309,7 @@ const VanWestendorpPricingTool: React.FC = () => {
         <div className="space-y-3 text-sm sm:text-base">
           <p><strong>🎯 Optimal Price:</strong> {opp ? `${currency} ${opp.toFixed(2)}` : 'N/A'} - This is the "sweet spot" of customer price sensitivity</p>
           <p><strong>📊 Recommended Price Range:</strong> {pmch && pme ? `${currency} ${pmch.toFixed(2)} - ${currency} ${pme.toFixed(2)}` : 'N/A'}</p>
+          <p><strong>🔍 Indifference Price Point:</strong> {ipp ? `${currency} ${ipp.toFixed(2)}` : 'N/A'} - Where quality and price perceptions balance</p>
           <p><strong>💡 Recommendation:</strong> Price your product near the OPP for optimal market acceptance.</p>
           <p><strong>⚠️ Warning:</strong> Pricing below PMC may raise quality concerns.</p>
         </div>
