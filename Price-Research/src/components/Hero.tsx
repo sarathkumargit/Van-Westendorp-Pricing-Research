@@ -10,7 +10,7 @@ interface CustomerResponse {
 
 interface VanWestendorpResults {
   opp: number | null; // Optimal Price Point
-  ipp: number | null; // Indifference Price Point
+  // ipp: number | null; // Indifference Price Point
   pmch: number | null; // Point of Marginal Cheapness
   pme: number | null; // Point of Marginal Expensiveness
   chartData: Array<{
