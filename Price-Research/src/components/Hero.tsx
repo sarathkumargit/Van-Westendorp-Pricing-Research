@@ -1,419 +1,984 @@
-import React, { useState } from 'react';
+// client/src/pages/FindYourDegree.tsx - Updated with stream-first approach
+import React, { useState, useMemo, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, Info, Search, Loader, AlertCircle, ChevronDown, CheckCircle } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '../hooks/redux';
+import {
+  addALResult,
+  setOLResults,
+  setZScore,
+  setExamDistrict
+} from '../store/slices/userSlice';
+import Header from '../components/Header';
+import { useSubjects, type Stream } from '../hooks/useSubjects';
+import { OLSubjectEntry, OL_CATEGORY_CONFIG } from '../types';
+import type { Subject } from '../types';
 
-interface PricingData {
-  tooCheap: number;
-  bargain: number;
-  expensive: number;
-  tooExpensive: number;
+interface QualificationEntry {
+  id: string;
+  subjectId: number;
+  subject: string;
+  grade: string;
 }
 
-interface Results {
-  opp: number;
-  ipp: number;
-  minPrice: number;
-  maxPrice: number;
+interface PredefinedOLSubject {
+  subject: string;
+  grade: string;
 }
 
-type Language = 'en' | 'si' | 'ta';
-type Currency = 'LKR' | 'USD' | 'EUR' | 'INR';
+interface FindYourDegreeProps {
+  onGoBack?: () => void;
+  onShowOptions?: (qualificationData: any) => void;
+  onGoToSearch?: () => void;
+}
 
-interface Translations {
-  [key: string]: {
-    [key: string]: string;
+type MaxQualification = 'AL' | 'OL' | '';
+
+const FindYourDegree: React.FC<FindYourDegreeProps> = ({ onGoBack, onShowOptions, onGoToSearch }) => {
+  const dispatch = useAppDispatch();
+  const { qualifications } = useAppSelector((state) => state.user);
+
+  // Subject management hook
+  const {
+    alSubjects,
+    olSubjects,
+    streams,
+    loading: subjectsLoading,
+    error: subjectsError,
+    getAvailableSubjects,
+    getSubjectById,
+    getOLSubjectsByCategory,
+    getPredefinedOLSubject,
+    getSubjectsByStream,
+    getStreamById,
+    clearError
+  } = useSubjects();
+
+  // Maximum qualification selection
+  const [maxQualification, setMaxQualification] = useState<MaxQualification>('');
+
+  // NEW: Stream selection state
+  const [selectedStreamId, setSelectedStreamId] = useState<number | null>(null);
+  const [streamSubjects, setStreamSubjects] = useState<Subject[]>([]);
+  const [loadingStreamSubjects, setLoadingStreamSubjects] = useState(false);
+
+  // AL Results (unchanged from original)
+  const [alResults, setAlResults] = useState<QualificationEntry[]>([
+    { id: '1', subjectId: 0, subject: '', grade: '' },
+    { id: '2', subjectId: 0, subject: '', grade: '' },
+    { id: '3', subjectId: 0, subject: '', grade: '' }
+  ]);
+
+  // OL Results - Structured by categories
+  const [olResults, setOlResults] = useState<OLSubjectEntry[]>([
+    // Religion (Required)
+    { id: 'ol-religion', category: 'religion', subjectId: 0, subject: '', grade: '', isPredefined: false },
+    // Language (Required)
+    { id: 'ol-language', category: 'language', subjectId: 0, subject: '', grade: '', isPredefined: false },
+    // Predefined subjects (Auto-populated)
+    { id: 'ol-english', category: 'english', subjectId: 0, subject: 'English Language', grade: '', isPredefined: true },
+    { id: 'ol-mathematics', category: 'mathematics', subjectId: 0, subject: 'Mathematics', grade: '', isPredefined: true },
+    { id: 'ol-history', category: 'history', subjectId: 0, subject: 'History', grade: '', isPredefined: true },
+    { id: 'ol-science', category: 'science', subjectId: 0, subject: 'Science', grade: '', isPredefined: true },
+    // Selectable categories
+    { id: 'ol-category1', category: 'category1', subjectId: 0, subject: '', grade: '', isPredefined: false },
+    { id: 'ol-category2', category: 'category2', subjectId: 0, subject: '', grade: '', isPredefined: false },
+    { id: 'ol-category3', category: 'category3', subjectId: 0, subject: '', grade: '', isPredefined: false }
+  ]);
+
+  // For predefined O/L subjects when A/L is selected
+  const [predefinedOLResults, setPredefinedOLResults] = useState<PredefinedOLSubject[]>([
+    { subject: 'English', grade: '' },
+    { subject: 'Mathematics', grade: '' },
+    { subject: 'Science', grade: '' },
+    { subject: 'First Language', grade: '' }
+  ]);
+
+  const [zScore, setZScore] = useState<string>('');
+  const [examDistrict, setExamDistrict] = useState<string>('');
+
+  // Dropdown state for OL categories
+  const [olDropdownStates, setOlDropdownStates] = useState<{[key: string]: boolean}>({});
+
+  // Grade options
+  const alGrades: string[] = ['A', 'B', 'C', 'S'];
+  const olGrades: string[] = ['A', 'B', 'C', 'S'];
+
+  // District options
+  const districts = [
+    'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
+    'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochhi', 'Mannar',
+    'Vavuniya', 'Mullaitivu', 'Batticaloa', 'Ampara', 'Trincomalee',
+    'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla',
+    'Moneragala', 'Ratnapura', 'Kegalle'
+  ];
+
+  // Get selected subject IDs for filtering
+  const selectedALSubjectIds = useMemo(() => 
+    alResults.filter(result => result.subjectId > 0).map(result => result.subjectId),
+    [alResults]
+  );
+
+  const selectedOLSubjectIds = useMemo(() => 
+    olResults.filter(result => result.subjectId > 0).map(result => result.subjectId),
+    [olResults]
+  );
+
+  // NEW: Handle stream selection
+  const handleStreamChange = async (streamId: string) => {
+    const numericStreamId = parseInt(streamId);
+    setSelectedStreamId(numericStreamId);
+    
+    // Reset AL results when stream changes
+    setAlResults([
+      { id: '1', subjectId: 0, subject: '', grade: '' },
+      { id: '2', subjectId: 0, subject: '', grade: '' },
+      { id: '3', subjectId: 0, subject: '', grade: '' }
+    ]);
+
+    if (numericStreamId > 0) {
+      setLoadingStreamSubjects(true);
+      try {
+        const subjects = await getSubjectsByStream(numericStreamId);
+        setStreamSubjects(subjects);
+      } catch (error) {
+        console.error('Error fetching subjects for stream:', error);
+        setStreamSubjects([]);
+      } finally {
+        setLoadingStreamSubjects(false);
+      }
+    } else {
+      setStreamSubjects([]);
+    }
   };
-}
 
-const translations: Translations = {
-  en: {
-    mainTitle: '🎢 Van Westendorp Pricing Research',
-    subtitle: 'Discover the perfect price for your product through customer perceptions',
-    productTitle: '📦 Product Information',
-    questionsTitle: '💡 The Four Magic Questions',
-    q1Title: '😬 Too Cheap - Quality Concerns',
-    q1Text: 'At what price would you consider this product to be so cheap that you\'d question its quality?',
-    q2Title: '🛍️ Great Value - Bargain Price',
-    q2Text: 'At what price would you consider this product to be a bargain — a great buy for the money?',
-    q3Title: '💸 Getting Expensive - But Still Considering',
-    q3Text: 'At what price would you begin to think this product is getting expensive, but still worth considering?',
-    q4Title: '💀 Too Expensive - Hard No',
-    q4Text: 'At what price would you consider this product to be too expensive to buy?',
-    calculateBtn: '🎯 Calculate Optimal Pricing',
-    resultsTitle: '📊 Your Pricing Analysis',
-    pricePointsTitle: '🎯 Key Price Points',
-    oppLabel: 'Optimal Price Point (OPP):',
-    ippLabel: 'Indifference Price Point (IPP):',
-    rangeTitle: '📏 Acceptable Range',
-    minLabel: 'Minimum Price:',
-    maxLabel: 'Maximum Price:',
-    recommendationsTitle: '💡 Recommendations',
-    footerText: 'Developed by sarath ',
-    productNamePlaceholder: 'Enter product name',
-    fillAllFields: 'Please fill in all fields'
-  },
-  si: {
-    mainTitle: '🎢 වෑන් වෙස්ටෙන්ඩෝප් මිල ගණන් පර්යේෂණය',
-    subtitle: 'ගනුදෙනුකරුවන්ගේ සංජානන හරහා ඔබේ නිෂ්පාදනය සඳහා පරිපූර්ණ මිල සොයා ගන්න',
-    productTitle: '📦 නිෂ්පාදන තොරතුරු',
-    questionsTitle: '💡 මැජික් ප්‍රශ්න හතර',
-    q1Title: '😬 ඉතා අඩු - ගුණාත්මක සැකයන්',
-    q1Text: 'මේ නිෂ්පාදනය කුමන මිලකදී ඔබට එහි ගුණාත්මක භාවය ගැන සැක ඇති වේද?',
-    q2Title: '🛍️ විශිෂ්ට වටිනාකම - හොඳ මිල',
-    q2Text: 'මේ නිෂ්පාදනය කුමන මිලකදී ඔබට සාධාරණ මිලක් ලෙස සිතේද?',
-    q3Title: '💸 මිල අධික වෙමින් - තවමත් සලකා බලමින්',
-    q3Text: 'මේ නිෂ්පාදනය කුමන මිලකදී ඔබට මිල අධික යැයි සිතුණද නමුත් තවමත් සලකා බලනවාද?',
-    q4Title: '💀 ඉතා මිල අධික - නිරපේක්ෂ නෑ',
-    q4Text: 'මේ නිෂ්පාදනය කුමන මිලකදී ඔබට මිලදී ගැනීමට නොහැකි යැයි සිතේද?',
-    calculateBtn: '🎯 ප්‍රශස්ත මිල ගණන් කරන්න',
-    resultsTitle: '📊 ඔබේ මිල විශ්ලේෂණය',
-    pricePointsTitle: '🎯 ප්‍රධාන මිල ලක්ෂ්‍ය',
-    oppLabel: 'ප්‍රශස්ත මිල ලක්ෂ්‍යය (OPP):',
-    ippLabel: 'උදාසීන මිල ලක්ෂ්‍යය (IPP):',
-    rangeTitle: '📏 පිළිගත හැකි පරාසය',
-    minLabel: 'අවම මිල:',
-    maxLabel: 'උපරිම මිල:',
-    recommendationsTitle: '💡 නිර්දේශ',
-    footerText: 'LetUs ව්‍යාපාර උපදේශනය විසින් බලගන්වන ලදී',
-    productNamePlaceholder: 'නිෂ්පාදන නම ඇතුළත් කරන්න',
-    fillAllFields: 'කරුණාකර සියලු ක්ෂේත්‍ර පුරවන්න'
-  },
-  ta: {
-    mainTitle: '🎢 வான் வெஸ்டென்டார்ப் விலை ஆராய்ச்சி',
-    subtitle: 'வாடிக்கையாளர் எண்ணங்கள் மூலம் உங்கள் தயாரிப்புக்கான சரியான விலையைக் கண்டறியுங்கள்',
-    productTitle: '📦 தயாரிப்பு தகவல்',
-    questionsTitle: '💡 நான்கு மந்திர கேள்விகள்',
-    q1Title: '😬 மிகவும் மலிவானது - தர சந்தேகங்கள்',
-    q1Text: 'எந்த விலையில் இந்த தயாரிப்பு மிகவும் மலிவானதாக கருதி அதன் தரத்தை கேள்விக்குள்ளாக்குவீர்கள்?',
-    q2Title: '🛍️ சிறந்த மதிப்பு - பேரம் விலை',
-    q2Text: 'எந்த விலையில் இந்த தயாரிப்பு பணத்திற்கு நல்ல வாங்கலாக கருதுவீர்கள்?',
-    q3Title: '💸 விலை அதிகரித்துவருகிறது - ஆனால் இன்னும் கருத்தில் கொள்ளுங்கள்',
-    q3Text: 'எந்த விலையில் இந்த தயாரிப்பு விலை அதிகமாவதாக நினைக்க ஆரம்பிப்பீர்கள், ஆனால் இன்னும் பரிசீலிக்க தகுந்ததாக இருக்கும்?',
-    q4Title: '💀 மிகவும் விலை அதிகம் - கடுமையான இல்லை',
-    q4Text: 'எந்த விலையில் இந்த தயாரிப்பு வாங்க முடியாத அளவுக்கு விலை அதிகமாக கருதுவீர்கள்?',
-    calculateBtn: '🎯 உகந்த விலையை கணக்கிடுங்கள்',
-    resultsTitle: '📊 உங்கள் விலை பகுப்பாய்வு',
-    pricePointsTitle: '🎯 முக்கிய விலை புள்ளிகள்',
-    oppLabel: 'உகந்த விலை புள்ளி (OPP):',
-    ippLabel: 'அலட்சிய விலை புள்ளி (IPP):',
-    rangeTitle: '📏 ஏற்றுக்கொள்ளத்தக்க வரம்பு',
-    minLabel: 'குறைந்தபட்ச விலை:',
-    maxLabel: 'அதிகபட்ச விலை:',
-    recommendationsTitle: '💡 பரிந்துரைகள்',
-    footerText: 'LetUs வணிக ஆலோசனையால் இயக்கப்படுகிறது',
-    productNamePlaceholder: 'தயாரிப்பு பெயரை உள்ளிடவும்',
-    fillAllFields: 'தயவுசெய்து அனைத்து புலங்களையும் நிரப்பவும்'
-  }
-};
+  // Initialize predefined OL subjects on component mount
+  useEffect(() => {
+    if (olSubjects.length > 0) {
+      setOlResults(prev => prev.map(entry => {
+        if (entry.isPredefined) {
+          // Map category to fixed code
+          const codeMap: { [key: string]: string } = {
+            'english': 'OL31',
+            'mathematics': 'OL32',
+            'history': 'OL33',
+            'science': 'OL34'
+          };
+          
+          const fixedCode = codeMap[entry.category];
+          if (fixedCode) {
+            const predefinedSubject = getPredefinedOLSubject(fixedCode);
+            if (predefinedSubject) {
+              return {
+                ...entry,
+                subjectId: predefinedSubject.id,
+                subject: predefinedSubject.name
+              };
+            }
+          }
+        }
+        return entry;
+      }));
+    }
+  }, [olSubjects, getPredefinedOLSubject]);
 
-const VanWestendorpPricingTool: React.FC = () => {
-  const [language, setLanguage] = useState<Language>('en');
-  const [currency, setCurrency] = useState<Currency>('LKR');
-  const [productName, setProductName] = useState<string>('');
-  const [pricingData, setPricingData] = useState<PricingData>({
-    tooCheap: 0,
-    bargain: 0,
-    expensive: 0,
-    tooExpensive: 0
-  });
-  const [results, setResults] = useState<Results | null>(null);
-  const [showResults, setShowResults] = useState<boolean>(false);
-
-  const t = translations[language];
-
-  const handleLanguageChange = (lang: Language) => {
-    setLanguage(lang);
+  // Handle qualification type change
+  const handleMaxQualificationChange = (qualification: MaxQualification) => {
+    setMaxQualification(qualification);
+    setSelectedStreamId(null);
+    setStreamSubjects([]);
+    
+    // Reset results when changing qualification type
+    if (qualification === 'AL') {
+      setAlResults([
+        { id: '1', subjectId: 0, subject: '', grade: '' },
+        { id: '2', subjectId: 0, subject: '', grade: '' },
+        { id: '3', subjectId: 0, subject: '', grade: '' }
+      ]);
+      setPredefinedOLResults([
+        { subject: 'English', grade: '' },
+        { subject: 'Mathematics', grade: '' },
+        { subject: 'Science', grade: '' },
+        { subject: 'First Language', grade: '' }
+      ]);
+    } else if (qualification === 'OL') {
+      // Reset structured OL results
+      setOlResults([
+        { id: 'ol-religion', category: 'religion', subjectId: 0, subject: '', grade: '', isPredefined: false },
+        { id: 'ol-language', category: 'language', subjectId: 0, subject: '', grade: '', isPredefined: false },
+        { id: 'ol-english', category: 'english', subjectId: 0, subject: 'English Language', grade: '', isPredefined: true },
+        { id: 'ol-mathematics', category: 'mathematics', subjectId: 0, subject: 'Mathematics', grade: '', isPredefined: true },
+        { id: 'ol-history', category: 'history', subjectId: 0, subject: 'History', grade: '', isPredefined: true },
+        { id: 'ol-science', category: 'science', subjectId: 0, subject: 'Science', grade: '', isPredefined: true },
+        { id: 'ol-category1', category: 'category1', subjectId: 0, subject: '', grade: '', isPredefined: false },
+        { id: 'ol-category2', category: 'category2', subjectId: 0, subject: '', grade: '', isPredefined: false },
+        { id: 'ol-category3', category: 'category3', subjectId: 0, subject: '', grade: '', isPredefined: false }
+      ]);
+    }
+    
+    // Reset other fields
+    setZScore('');
+    setExamDistrict('');
   };
 
-  const handlePricingDataChange = (field: keyof PricingData, value: string) => {
-    setPricingData(prev => ({
-      ...prev,
-      [field]: parseFloat(value) || 0
+  // Handle AL subject change - now uses stream-filtered subjects
+  const handleALSubjectChange = (index: number, subjectId: string) => {
+    const selectedSubjectId = parseInt(subjectId);
+    const selectedSubject = streamSubjects.find(s => s.id === selectedSubjectId);
+    
+    setAlResults(prev => prev.map((result, i) => 
+      i === index 
+        ? { 
+            ...result, 
+            subjectId: selectedSubjectId,
+            subject: selectedSubject?.name || '',
+            grade: '' // Reset grade when subject changes
+          }
+        : result
+    ));
+  };
+
+  // Handle AL grade change
+  const handleALGradeChange = (index: number, grade: string) => {
+    setAlResults(prev => prev.map((result, i) => 
+      i === index ? { ...result, grade } : result
+    ));
+  };
+
+  // Handle OL subject change for structured categories
+  const updateOlResult = (id: string, field: 'subjectId' | 'grade', value: string | number) => {
+    setOlResults(prev => prev.map(result => {
+      if (result.id === id) {
+        if (field === 'subjectId') {
+          const selectedSubject = olSubjects.find(s => s.id === Number(value));
+          return {
+            ...result,
+            subjectId: Number(value),
+            subject: selectedSubject?.name || ''
+          };
+        } else {
+          return { ...result, [field]: String(value) };
+        }
+      }
+      return result;
     }));
   };
 
-  const calculatePricing = () => {
-    const { tooCheap, bargain, expensive, tooExpensive } = pricingData;
+  // Handle predefined OL subject grade change
+  const handlePredefinedOLGradeChange = (index: number, grade: string) => {
+    setPredefinedOLResults(prev => prev.map((result, i) => 
+      i === index ? { ...result, grade } : result
+    ));
+  };
 
-    if (tooCheap === 0 || bargain === 0 || expensive === 0 || tooExpensive === 0) {
-      alert(t.fillAllFields);
+  // Utility functions for OL categories
+  const getAvailableOlSubjectsForCategory = (category: keyof typeof OL_CATEGORY_CONFIG, currentId: string) => {
+    const categorySubjects = getOLSubjectsByCategory(category);
+    const selectedIds = olResults
+      .filter(r => r.id !== currentId && r.subjectId > 0)
+      .map(r => r.subjectId);
+    return categorySubjects.filter(subject => !selectedIds.includes(subject.id));
+  };
+
+  const toggleOlDropdown = (id: string) => {
+    setOlDropdownStates(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  // Handle navigation and form submission
+  const handleGoToSearch = () => {
+    if (onGoToSearch) {
+      onGoToSearch();
+    }
+  };
+
+  const handleShowOptions = () => {
+    if (!maxQualification) {
+      alert('Please select your maximum qualification to continue.');
       return;
     }
 
-    // Van Westendorp calculations
-    const opp = (tooCheap + tooExpensive) / 2; // Simplified OPP calculation
-    const ipp = (bargain + expensive) / 2; // Simplified IPP calculation
+    if (maxQualification === 'AL') {
+      if (!selectedStreamId) {
+        alert('Please select your stream to continue.');
+        return;
+      }
 
-    const calculatedResults: Results = {
-      opp,
-      ipp,
-      minPrice: tooCheap,
-      maxPrice: tooExpensive
-    };
+      // Validate A/L subjects
+      const validALResults = alResults.filter(result => result.subjectId > 0 && result.grade);
 
-    setResults(calculatedResults);
-    setShowResults(true);
+      if (validALResults.length === 0) {
+        alert('Please add at least one A/L subject and grade to continue.');
+        return;
+      }
 
-    // Smooth scroll to results after state update
-    setTimeout(() => {
-      const resultsElement = document.getElementById('results');
-      if (resultsElement) {
-        resultsElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
+      // Get predefined O/L results
+      const validOLResults = predefinedOLResults.filter(result => result.grade);
+
+      const selectedStream = getStreamById(selectedStreamId);
+
+      const qualificationData = {
+        maxQualification: 'AL',
+        selectedStream: selectedStream ? {
+          streamId: selectedStream.id,
+          streamName: selectedStream.name
+        } : null,
+        alResults: validALResults.map(result => ({
+          subjectId: result.subjectId,
+          subject: result.subject,
+          grade: result.grade
+        })),
+        olResults: validOLResults,
+        zScore: zScore ? parseFloat(zScore) : null,
+        examDistrict: examDistrict || null
+      };
+
+      // Store in localStorage for persistence
+      localStorage.setItem('userQualifications', JSON.stringify(qualificationData));
+
+      if (onShowOptions) {
+        onShowOptions(qualificationData);
+      }
+
+    } else if (maxQualification === 'OL') {
+      // Validate structured O/L subjects
+      const validOLResults = olResults.filter(result => result.subjectId > 0 && result.grade);
+
+      if (validOLResults.length === 0) {
+        alert('Please add at least one O/L subject and grade to continue.');
+        return;
+      }
+
+      const qualificationData = {
+        maxQualification: 'OL',
+        olResults: validOLResults.map(result => ({
+          id: result.id,
+          category: result.category,
+          subjectId: result.subjectId,
+          subject: result.subject,
+          grade: result.grade,
+          isPredefined: result.isPredefined
+        }))
+      };
+
+      // Store in localStorage for persistence
+      localStorage.setItem('userQualifications', JSON.stringify(qualificationData));
+
+      if (onShowOptions) {
+        onShowOptions(qualificationData);
+      }
+    }
+
+    // Try Redux dispatch with error handling
+    try {
+      if (typeof addALResult === 'function' && maxQualification === 'AL') {
+        const validALResults = alResults.filter(result => result.subjectId > 0 && result.grade);
+        validALResults.forEach(result => {
+          dispatch(addALResult({ subject: result.subject, grade: result.grade }));
         });
       }
-    }, 100);
-  };
-
-  const generateRecommendations = (): JSX.Element => {
-    if (!results) return <div></div>;
-
-    const { opp, minPrice } = results;
-
-    if (language === 'si') {
-      return (
-        <div className="space-y-3">
-          <p><strong>🎯 ප්‍රශස්ත මිල:</strong> {currency} {opp.toFixed(2)} - මෙය ඔබේ "Goldilocks" කලාපයයි!</p>
-          <p><strong>📊 මිල පරාසය:</strong> {currency} {minPrice.toFixed(2)} - {currency} {results.maxPrice.toFixed(2)}</p>
-          <p><strong>💡 නිර්දේශය:</strong> ඔබේ අන්තිම මිල {currency} {(opp * 0.9).toFixed(2)} - {currency} {(opp * 1.1).toFixed(2)} අතර තබන්න.</p>
-          <p><strong>⚠️ අවධානය:</strong> {currency} {minPrice.toFixed(2)} ට වඩා අඩු මිලක් ගුණාත්මක සැකයන් ඇති කරයි.</p>
-        </div>
-      );
-    } else if (language === 'ta') {
-      return (
-        <div className="space-y-3">
-          <p><strong>🎯 உகந்த விலை:</strong> {currency} {opp.toFixed(2)} - இது உங்கள் "கோல்டிலாக்ஸ்" மண்டலம்!</p>
-          <p><strong>📊 விலை வரம்பு:</strong> {currency} {minPrice.toFixed(2)} - {currency} {results.maxPrice.toFixed(2)}</p>
-          <p><strong>💡 பரிந்துரை:</strong> உங்கள் இறுதி விலையை {currency} {(opp * 0.9).toFixed(2)} - {currency} {(opp * 1.1).toFixed(2)} இடையில் வைக்கவும்.</p>
-          <p><strong>⚠️ எச்சரிக்கை:</strong> {currency} {minPrice.toFixed(2)} விட குறைவான விலை தர சந்தேகங்களை ஏற்படுத்தும்.</p>
-        </div>
-      );
-    } else {
-      return (
-        <div className="space-y-3">
-          <p><strong>🎯 Optimal Price:</strong> {currency} {opp.toFixed(2)} - This is your "Goldilocks" zone!</p>
-          <p><strong>📊 Price Range:</strong> {currency} {minPrice.toFixed(2)} - {currency} {results.maxPrice.toFixed(2)}</p>
-          <p><strong>💡 Recommendation:</strong> Set your final price between {currency} {(opp * 0.9).toFixed(2)} - {currency} {(opp * 1.1).toFixed(2)}.</p>
-          <p><strong>⚠️ Warning:</strong> Pricing below {currency} {minPrice.toFixed(2)} may create quality concerns.</p>
-        </div>
-      );
+    } catch (error) {
+      console.error('Redux dispatch error:', error);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-purple-800" style={{ fontFamily: 'Inter, sans-serif' }}>
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            {t.mainTitle}
-          </h1>
-          <p className="text-xl text-blue-100 mb-6">
-            {t.subtitle}
-          </p>
-          
-          {/* Language Selector */}
-          <div className="flex justify-center space-x-4 mb-8">
-            {(['en', 'si', 'ta'] as Language[]).map((lang) => (
+  const handleClearAll = () => {
+    setMaxQualification('');
+    setSelectedStreamId(null);
+    setStreamSubjects([]);
+    setAlResults([
+      { id: '1', subjectId: 0, subject: '', grade: '' },
+      { id: '2', subjectId: 0, subject: '', grade: '' },
+      { id: '3', subjectId: 0, subject: '', grade: '' }
+    ]);
+    setOlResults([
+      { id: 'ol-religion', category: 'religion', subjectId: 0, subject: '', grade: '', isPredefined: false },
+      { id: 'ol-language', category: 'language', subjectId: 0, subject: '', grade: '', isPredefined: false },
+      { id: 'ol-english', category: 'english', subjectId: 0, subject: 'English Language', grade: '', isPredefined: true },
+      { id: 'ol-mathematics', category: 'mathematics', subjectId: 0, subject: 'Mathematics', grade: '', isPredefined: true },
+      { id: 'ol-history', category: 'history', subjectId: 0, subject: 'History', grade: '', isPredefined: true },
+      { id: 'ol-science', category: 'science', subjectId: 0, subject: 'Science', grade: '', isPredefined: true },
+      { id: 'ol-category1', category: 'category1', subjectId: 0, subject: '', grade: '', isPredefined: false },
+      { id: 'ol-category2', category: 'category2', subjectId: 0, subject: '', grade: '', isPredefined: false },
+      { id: 'ol-category3', category: 'category3', subjectId: 0, subject: '', grade: '', isPredefined: false }
+    ]);
+    setPredefinedOLResults([
+      { subject: 'English', grade: '' },
+      { subject: 'Mathematics', grade: '' },
+      { subject: 'Science', grade: '' },
+      { subject: 'First Language', grade: '' }
+    ]);
+    setZScore('');
+    setExamDistrict('');
+    clearError();
+  };
+
+  // NEW: Stream-based Subject dropdown component
+  const StreamSubjectDropdown: React.FC<{
+    value: number;
+    onChange: (value: string) => void;
+    excludeIds: number[];
+    placeholder?: string;
+    disabled?: boolean;
+  }> = ({ value, onChange, excludeIds, placeholder = "Select subject", disabled = false }) => {
+    const availableSubjects = streamSubjects.filter(subject => !excludeIds.includes(subject.id));
+    
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled || loadingStreamSubjects || !selectedStreamId}
+        className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+          disabled || loadingStreamSubjects || !selectedStreamId ? 'bg-gray-100 cursor-not-allowed' : ''
+        }`}
+      >
+        <option value="">{placeholder}</option>
+        {availableSubjects.map((subject) => (
+          <option key={subject.id} value={subject.id}>
+            {subject.name} ({subject.code})
+          </option>
+        ))}
+      </select>
+    );
+  };
+
+  // Subject dropdown component for OL subjects
+  const SubjectDropdown: React.FC<{
+    value: number;
+    onChange: (value: string) => void;
+    level: 'AL' | 'OL';
+    excludeIds: number[];
+    placeholder?: string;
+    disabled?: boolean;
+  }> = ({ value, onChange, level, excludeIds, placeholder = "Select subject", disabled = false }) => {
+    const availableSubjects = getAvailableSubjects(level, excludeIds);
+    
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled || subjectsLoading}
+        className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+          disabled || subjectsLoading ? 'bg-gray-100 cursor-not-allowed' : ''
+        }`}
+      >
+        <option value="">{placeholder}</option>
+        {availableSubjects.map((subject) => (
+          <option key={subject.id} value={subject.id}>
+            {subject.name} ({subject.code})
+          </option>
+        ))}
+      </select>
+    );
+  };
+
+  // OL Subject Row Component for structured categories
+  const renderOlSubjectRow = (result: OLSubjectEntry, index: number) => {
+    const categoryConfig = OL_CATEGORY_CONFIG[result.category];
+    const availableSubjects = result.isPredefined 
+      ? [] 
+      : getAvailableOlSubjectsForCategory(result.category, result.id);
+
+    return (
+      <div key={result.id} className={`flex items-center space-x-4 mb-4 p-4 rounded-lg ${
+        result.isPredefined ? 'bg-green-50 border border-green-200' : 'bg-gray-50'
+      }`}>
+        <div className="flex-1">
+          <div className="flex items-center space-x-2 mb-2">
+            <label className="text-sm font-medium text-gray-700">
+              {categoryConfig.label}
+            </label>
+            {result.isPredefined && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Predefined
+              </span>
+            )}
+            <span className="text-xs text-gray-500">({categoryConfig.codeRange})</span>
+          </div>
+
+          {result.isPredefined ? (
+            <div className="px-3 py-2 bg-green-100 border border-green-300 rounded-md text-gray-700">
+              {result.subject}
+            </div>
+          ) : (
+            <div className="relative">
               <button
-                key={lang}
-                onClick={() => handleLanguageChange(lang)}
-                className={`px-4 py-2 rounded-lg transition-all duration-300 backdrop-blur-sm ${
-                  language === lang
-                    ? 'bg-green-600 bg-opacity-40 text-white'
-                    : 'bg-green-600 bg-opacity-20 text-white hover:bg-opacity-30'
-                }`}
+                onClick={() => toggleOlDropdown(result.id)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-left flex items-center justify-between"
               >
-                {lang === 'en' ? 'English' : lang === 'si' ? 'සිංහල' : 'தமிழ்'}
+                <span className={result.subject ? 'text-gray-900' : 'text-gray-500'}>
+                  {result.subject || 'Select Subject'}
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${
+                  olDropdownStates[result.id] ? 'rotate-180' : ''
+                }`} />
               </button>
+
+              {olDropdownStates[result.id] && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  {availableSubjects.length > 0 ? (
+                    availableSubjects.map(subject => (
+                      <button
+                        key={subject.id}
+                        onClick={() => {
+                          updateOlResult(result.id, 'subjectId', subject.id);
+                          toggleOlDropdown(result.id);
+                        }}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+                      >
+                        {subject.name} ({subject.code})
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-gray-500 text-sm">
+                      No subjects available for this category
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="w-24">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+          <select
+            value={result.grade}
+            onChange={(e) => updateOlResult(result.id, 'grade', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="">Grade</option>
+            {olGrades.map(grade => (
+              <option key={grade} value={grade}>{grade}</option>
             ))}
+          </select>
+        </div>
+      </div>
+    );
+  };
+
+  // Error display component
+  const ErrorDisplay: React.FC = () => {
+    if (!subjectsError) return null;
+
+    return (
+      <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="flex items-center">
+          <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+          <div>
+            <h3 className="text-sm font-medium text-red-800">Error Loading Data</h3>
+            <p className="text-sm text-red-600 mt-1">{subjectsError}</p>
+            <button
+              onClick={clearError}
+              className="text-sm text-red-600 underline hover:text-red-800 mt-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Loading display component
+  const LoadingDisplay: React.FC = () => {
+    if (!subjectsLoading) return null;
+
+    return (
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-center">
+          <Loader className="w-5 h-5 text-blue-500 mr-2 animate-spin" />
+          <p className="text-sm text-blue-700">Loading data from database...</p>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header onLogoClick={onGoBack} />
+      {/* Go Back Button */}
+      {onGoBack && (
+        <button 
+          onClick={onGoBack}
+          className="absolute top-6 left-6 flex items-center text-gray-600 hover:text-gray-800 transition-colors z-10 mt-32"
+        >
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back to Home
+        </button>
+      )}
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 mt-16">
+        {/* Header Section */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Find Your Perfect Degree
+          </h1>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            Tell us about your qualifications and we'll help you discover the best degree programs for your future.
+          </p>
+        </div>
+
+        {/* Error and Loading States */}
+        <ErrorDisplay />
+        <LoadingDisplay />
+
+        {/* Maximum Qualification Selection */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">What's your maximum qualification?</h2>
+          <p className="text-gray-600 mb-8">
+            Select the highest level of education you have completed or are currently studying.
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <button
+              onClick={() => handleMaxQualificationChange('AL')}
+              disabled={subjectsLoading}
+              className={`p-6 border-2 rounded-lg text-left transition-all ${
+                maxQualification === 'AL'
+                  ? 'border-purple-500 bg-purple-50 text-purple-900'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              } ${subjectsLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className="flex items-center">
+                <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
+                  maxQualification === 'AL'
+                    ? 'border-purple-500 bg-purple-500'
+                    : 'border-gray-300'
+                }`}>
+                  {maxQualification === 'AL' && (
+                    <div className="w-2 h-2 rounded-full bg-white mx-auto mt-0.5"></div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">GCE Advanced Level (A/L)</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    I have completed or currently studying A/L
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleMaxQualificationChange('OL')}
+              disabled={subjectsLoading}
+              className={`p-6 border-2 rounded-lg text-left transition-all ${
+                maxQualification === 'OL'
+                  ? 'border-purple-500 bg-purple-50 text-purple-900'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              } ${subjectsLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className="flex items-center">
+                <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
+                  maxQualification === 'OL'
+                    ? 'border-purple-500 bg-purple-500'
+                    : 'border-gray-300'
+                }`}>
+                  {maxQualification === 'OL' && (
+                    <div className="w-2 h-2 rounded-full bg-white mx-auto mt-0.5"></div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">GCE Ordinary Level (O/L)</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    I have only completed O/L qualifications
+                  </p>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
-        {/* Main Card */}
-        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
-          {/* Product Info Section */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-              {t.productTitle}
-            </h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                placeholder={t.productNamePlaceholder}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+        {/* NEW: Stream Selection (Only for AL) */}
+        {maxQualification === 'AL' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Select Your Stream</h2>
+            <p className="text-gray-600 mb-8">
+              Choose the stream that matches your A/L subject combination.
+            </p>
+
+            <div className="max-w-md">
               <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as Currency)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={selectedStreamId || ''}
+                onChange={(e) => handleStreamChange(e.target.value)}
+                disabled={subjectsLoading || streams.length === 0}
+                className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                  subjectsLoading || streams.length === 0 ? 'bg-gray-100 cursor-not-allowed' : ''
+                }`}
               >
-                <option value="LKR">LKR (රුපියල්)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="INR">INR (₹)</option>
+                <option value="">Select your stream</option>
+                {streams.map((stream) => (
+                  <option key={stream.id} value={stream.id}>
+                    {stream.name}
+                  </option>
+                ))}
               </select>
-            </div>
-          </div>
 
-          {/* Pricing Questions */}
-          <div className="p-6">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">
-              {t.questionsTitle}
-            </h2>
-            
-            {/* Question 1 */}
-            <div className="mb-8 p-6 bg-red-50 rounded-xl border-l-4 border-red-400">
-              <h3 className="text-lg font-semibold text-red-800 mb-3">
-                {t.q1Title}
-              </h3>
-              <p className="text-gray-700 mb-4">
-                {t.q1Text}
-              </p>
-              <input
-                type="number"
-                value={pricingData.tooCheap || ''}
-                onChange={(e) => handlePricingDataChange('tooCheap', e.target.value)}
-                placeholder="0"
-                className="w-full px-4 py-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
-              />
-            </div>
-
-            {/* Question 2 */}
-            <div className="mb-8 p-6 bg-green-50 rounded-xl border-l-4 border-green-400">
-              <h3 className="text-lg font-semibold text-green-800 mb-3">
-                {t.q2Title}
-              </h3>
-              <p className="text-gray-700 mb-4">
-                {t.q2Text}
-              </p>
-              <input
-                type="number"
-                value={pricingData.bargain || ''}
-                onChange={(e) => handlePricingDataChange('bargain', e.target.value)}
-                placeholder="0"
-                className="w-full px-4 py-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
-              />
-            </div>
-
-            {/* Question 3 */}
-            <div className="mb-8 p-6 bg-yellow-50 rounded-xl border-l-4 border-yellow-400">
-              <h3 className="text-lg font-semibold text-yellow-800 mb-3">
-                {t.q3Title}
-              </h3>
-              <p className="text-gray-700 mb-4">
-                {t.q3Text}
-              </p>
-              <input
-                type="number"
-                value={pricingData.expensive || ''}
-                onChange={(e) => handlePricingDataChange('expensive', e.target.value)}
-                placeholder="0"
-                className="w-full px-4 py-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
-              />
-            </div>
-
-            {/* Question 4 */}
-            <div className="mb-8 p-6 bg-purple-50 rounded-xl border-l-4 border-purple-400">
-              <h3 className="text-lg font-semibold text-purple-800 mb-3">
-                {t.q4Title}
-              </h3>
-              <p className="text-gray-700 mb-4">
-                {t.q4Text}
-              </p>
-              <input
-                type="number"
-                value={pricingData.tooExpensive || ''}
-                onChange={(e) => handlePricingDataChange('tooExpensive', e.target.value)}
-                placeholder="0"
-                className="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg font-semibold transition-all duration-300 focus:transform focus:-translate-y-1 focus:shadow-lg"
-              />
-            </div>
-
-            {/* Calculate Button */}
-            <div className="text-center mb-8">
-              <button
-                onClick={calculatePricing}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300 shadow-lg"
-              >
-                {t.calculateBtn}
-              </button>
-            </div>
-
-            {/* Results Section */}
-            {showResults && results && (
-              <div id="results">
-                <h2 className="text-2xl font-semibold text-gray-800 mb-6">
-                  {t.resultsTitle}
-                </h2>
-                
-                <div className="grid md:grid-cols-2 gap-6 mb-8">
-                  {/* Price Points */}
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-100 p-6 rounded-xl">
-                    <h3 className="text-lg font-semibold text-blue-800 mb-4">
-                      {t.pricePointsTitle}
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">{t.oppLabel}</span>
-                        <span className="font-bold text-blue-600">
-                          {currency} {results.opp.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">{t.ippLabel}</span>
-                        <span className="font-bold text-green-600">
-                          {currency} {results.ipp.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Price Range */}
-                  <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-6 rounded-xl">
-                    <h3 className="text-lg font-semibold text-green-800 mb-4">
-                      {t.rangeTitle}
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">{t.minLabel}</span>
-                        <span className="font-bold text-red-600">
-                          {currency} {results.minPrice.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">{t.maxLabel}</span>
-                        <span className="font-bold text-purple-600">
-                          {currency} {results.maxPrice.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+              {selectedStreamId && (
+                <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center">
+                    <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+                    <span className="text-green-800 font-medium">
+                      {getStreamById(selectedStreamId)?.name} selected
+                    </span>
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
 
-                {/* Recommendations */}
-                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-6 rounded-xl">
-                  <h3 className="text-lg font-semibold text-orange-800 mb-4">
-                    {t.recommendationsTitle}
-                  </h3>
-                  <div className="text-gray-700">
-                    {generateRecommendations()}
+        {/* Qualification-specific forms */}
+        <div className="space-y-8">
+          {/* AL Results Section */}
+          {maxQualification === 'AL' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6">GCE Advanced Level Results</h2>
+              <p className="text-gray-600 mb-6">
+                {selectedStreamId 
+                  ? `Enter your A/L subjects and grades for ${getStreamById(selectedStreamId)?.name}` 
+                  : 'Please select a stream first to see available subjects'
+                }
+              </p>
+
+              {!selectedStreamId && (
+                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center">
+                    <AlertCircle className="w-5 h-5 text-yellow-500 mr-2" />
+                    <p className="text-yellow-800">
+                      Please select your stream above to see the available subjects for your A/L combination.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {alResults.map((result, index) => (
+                  <div key={result.id} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Subject {index + 1}
+                      </label>
+                      <StreamSubjectDropdown
+                        value={result.subjectId}
+                        onChange={(value) => handleALSubjectChange(index, value)}
+                        excludeIds={selectedALSubjectIds.filter((_, i) => i !== index)}
+                        placeholder="Select A/L subject"
+                        disabled={!selectedStreamId}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Grade
+                      </label>
+                      <select
+                        value={result.grade}
+                        onChange={(e) => handleALGradeChange(index, e.target.value)}
+                        disabled={!result.subjectId || loadingStreamSubjects}
+                        className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                          !result.subjectId || loadingStreamSubjects ? 'bg-gray-100 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        <option value="">Select grade</option>
+                        {alGrades.map(grade => (
+                          <option key={grade} value={grade}>{grade}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Predefined O/L Subjects for A/L Students */}
+              <div className="mt-8 pt-8 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  O/L Results (Main Subjects)
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Enter grades for key O/L subjects (optional but recommended)
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {predefinedOLResults.map((result, index) => (
+                    <div key={index}>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {result.subject}
+                      </label>
+                      <select
+                        value={result.grade}
+                        onChange={(e) => handlePredefinedOLGradeChange(index, e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="">Select grade</option>
+                        {olGrades.map(grade => (
+                          <option key={grade} value={grade}>{grade}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* O/L Results Section with Structured Categories */}
+          {maxQualification === 'OL' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6">GCE Ordinary Level Results</h2>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start space-x-3">
+                  <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium mb-1">O/L Subject Categories:</p>
+                    <p>Four subjects (English, Mathematics, History, Science) are predefined and required. 
+                    Five other subjects must be selected from specific categories according to O/L curriculum structure.</p>
                   </div>
                 </div>
               </div>
-            )}
-          </div>
+
+              <div className="space-y-4">
+                {olResults.map((result, index) => renderOlSubjectRow(result, index))}
+              </div>
+            </div>
+          )}
+
+          {/* Z-Score Section (Only for A/L) */}
+          {maxQualification === 'AL' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-900">Z-Score</h2>
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-600 text-xs font-medium rounded-full">
+                  Optional
+                </span>
+              </div>
+
+              <p className="text-gray-600 mb-6">Enter your Z-Score if available</p>
+
+              <div className="max-w-xs">
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  max="3"
+                  value={zScore}
+                  onChange={(e) => setZScore(e.target.value)}
+                  placeholder="e.g., 1.5432"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <p className="text-sm text-gray-500 mt-2">
+                  <Info className="w-4 h-4 inline mr-1" />
+                  Z-Score typically ranges from 0 to 3
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Exam District Section (Only for A/L) */}
+          {maxQualification === 'AL' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <div className="flex items-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-900">Exam District</h2>
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-600 text-xs font-medium rounded-full">
+                  Optional
+                </span>
+              </div>
+
+              <p className="text-gray-600 mb-6">Select the district where you sat for your A/L examination</p>
+
+              <div className="max-w-sm">
+                <select
+                  value={examDistrict}
+                  onChange={(e) => setExamDistrict(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="">Select district</option>
+                  {districts.map(district => (
+                    <option key={district} value={district}>{district}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-8 text-white">
-          <p>{t.footerText}</p>
-          <p className="text-blue-200 text-sm mt-2"> </p>
+        {/* Action Buttons - Show only if qualification is selected */}
+        {maxQualification && (
+          <div className="flex justify-between items-center mt-12">
+            <button
+              onClick={handleClearAll}
+              className="px-6 py-3 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
+            >
+              Clear All
+            </button>
+
+            <div className="flex gap-4">
+              <button
+                onClick={handleGoToSearch}
+                disabled={subjectsLoading}
+                className={`flex items-center px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl ${
+                  subjectsLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {subjectsLoading ? (
+                  <>
+                    <Loader className="w-5 h-5 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    Search Courses
+                    <Search className="w-5 h-5 ml-2" />
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={handleShowOptions}
+                disabled={subjectsLoading}
+                className={`flex items-center px-8 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors shadow-lg hover:shadow-xl ${
+                  subjectsLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {subjectsLoading ? (
+                  <>
+                    <Loader className="w-5 h-5 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    Show me my options
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Data Loading Summary */}
+        {!subjectsLoading && !subjectsError && alSubjects.length > 0 && (
+          <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center text-green-700">
+              <Info className="w-5 h-5 mr-2" />
+              <span className="text-sm">
+                Successfully loaded {alSubjects.length} A/L subjects, {olSubjects.length} O/L subjects, and {streams.length} streams from database
+              </span>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="mt-20 py-8 border-t border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-gray-500">
+            2025 - All rights are reserved for PathFinder.
+          </p>
         </div>
-      </div>
+      </footer>
     </div>
   );
 };
 
-export default VanWestendorpPricingTool;
+export default FindYourDegree;
