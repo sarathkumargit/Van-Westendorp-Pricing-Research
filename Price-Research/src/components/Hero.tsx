@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 
 interface CustomerResponse {
   id: number;
@@ -154,7 +154,7 @@ const translations = {
   }
 };
 
-const VanWestendorpPricingTool: React.FC = () => {
+const VanWestendorpPricingTool = () => {
   const [language, setLanguage] = useState<Language>('en');
   const [currency, setCurrency] = useState<Currency>('LKR');
   const [customers, setCustomers] = useState<CustomerResponse[]>([
@@ -391,7 +391,6 @@ const VanWestendorpPricingTool: React.FC = () => {
     const safeMin = pmch || minPrice;
     const safeMax = pme || maxPrice;
     
-    const optimalRange = `${currency} ${Math.min(optimalPrice, maxPrice).toFixed(2)} - ${currency} ${Math.max(optimalPrice, maxPrice).toFixed(2)}`;
     const acceptableRange = `${currency} ${Math.min(safeMin, safeMax).toFixed(2)} - ${currency} ${Math.max(safeMin, safeMax).toFixed(2)}`;
 
     // Generate recommendation based on available data
